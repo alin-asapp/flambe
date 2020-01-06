@@ -26,7 +26,8 @@ class RAdam(Optimizer, Component):
         self.degenerated_to_sgd = degenerated_to_sgd
         if isinstance(params, (list, tuple)) and len(params) > 0 and isinstance(params[0], dict):
             for param in params:
-                if 'betas' in param and (param['betas'][0] != betas[0] or param['betas'][1] != betas[1]):
+                betas_diff = (param['betas'][0] != betas[0] or param['betas'][1] != betas[1])
+                if 'betas' in param and betas_diff:
                     param['buffer'] = [[None, None, None] for _ in range(10)]
         defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, buffer=[[None, None, None] for _ in range(10)])
         super(RAdam, self).__init__(params, defaults)

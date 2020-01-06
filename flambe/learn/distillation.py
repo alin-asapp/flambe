@@ -187,7 +187,7 @@ class DistillationTrainer(Trainer):
 
         student_pred = F.log_softmax(student_logits / self.temp, dim=1)
         teacher_pred = F.softmax(teacher_logits / self.temp, dim=1)
-        
+
         kl_loss = F.kl_div(student_pred, teacher_pred, size_average=False) / teacher_pred.shape[0]
         loss += (self.alpha_kl * self.temp**2) * kl_loss
 
