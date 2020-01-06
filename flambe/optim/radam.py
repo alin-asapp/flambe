@@ -1,6 +1,6 @@
 import math
 import torch
-from torch.optim.optimizer import Optimizer, required
+from torch.optim.optimizer import Optimizer
 
 from flambe.compile import Component
 
@@ -13,7 +13,13 @@ class RAdam(Optimizer, Component):
     Taken from https://github.com/LiyuanLucasLiu/RAdam.
     '''
 
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, degenerated_to_sgd=True):
+    def __init__(self,
+                 params,
+                 lr=1e-3,
+                 betas=(0.9, 0.999),
+                 eps=1e-8,
+                 weight_decay=0,
+                 degenerated_to_sgd=True):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -29,7 +35,11 @@ class RAdam(Optimizer, Component):
                 betas_diff = (param['betas'][0] != betas[0] or param['betas'][1] != betas[1])
                 if 'betas' in param and betas_diff:
                     param['buffer'] = [[None, None, None] for _ in range(10)]
-        defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, buffer=[[None, None, None] for _ in range(10)])
+        defaults = dict(lr=lr,
+                        betas=betas,
+                        eps=eps,
+                        weight_decay=weight_decay,
+                        buffer=[[None, None, None] for _ in range(10)])
         super(RAdam, self).__init__(params, defaults)
 
     def __setstate__(self, state):
@@ -85,7 +95,9 @@ class RAdam(Optimizer, Component):
 
                     # more conservative since it's an approximated value
                     if N_sma >= 5:
-                        step_size = math.sqrt((1 - beta2_t) * (N_sma - 4) / (N_sma_max - 4) * (N_sma - 2) / N_sma * N_sma_max / (N_sma_max - 2)) / (1 - beta1 ** state['step'])
+                        term1 = (1 - beta2_t) * (N_sma - 4) / (N_sma_max - 4)
+                        term2 = (N_sma - 2) / N_sma * N_sma_max / (N_sma_max - 2)
+                        step_size = math.sqrt(term1 * term2) / (1 - beta1 ** state['step'])
                     elif self.degenerated_to_sgd:
                         step_size = 1.0 / (1 - beta1 ** state['step'])
                     else:
