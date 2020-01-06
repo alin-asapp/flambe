@@ -169,7 +169,7 @@ class DistillationTrainer(Trainer):
         with torch.no_grad():
             teacher_logits, _ = self.teacher_model(*teacher_batch)
 
-        loss = 0
+        loss = torch.tensor(0.).to(self.device)
         student_pred = F.log_softmax(student_logits, dim=-1)
 
         if self.alpha_kl < 1.0:
