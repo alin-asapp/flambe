@@ -2,6 +2,7 @@ import pytest
 import tempfile
 from collections import abc, OrderedDict
 import os
+import random
 
 import torch
 import dill
@@ -107,9 +108,16 @@ class Composite(Component):
 
 class BasicStateful(Component):
     def __init__(self):
-        self.x = 2019
+        self.x = random.randint(0, 100000)
         self.register_attrs('x')
         # self.b = Basic()
+
+
+class BasicStatefulTwo(Component, torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.y = random.randint(0, 100000)
+        self.register_attrs('y')
 
 
 class IntermediateTorch(Component, torch.nn.Module):
@@ -125,6 +133,13 @@ class IntermediateStatefulTorch(Component, torch.nn.Module):
         self.linear = torch.nn.Linear(2, 2)
 
 
+class IntermediateTorchOnly(torch.nn.Module):
+    def __init__(self, component):
+        super().__init__()
+        self.child = component
+        self.linear = torch.nn.Linear(2, 2)
+
+
 class RootTorch(Component):
     def __init__(self):
         super().__init__()
@@ -135,7 +150,7 @@ class RootTorch(Component):
 
 
 class ComposableTorchStateful(Component, torch.nn.Module):
-    def __init__(self, a: Component, b: int, c: torch.nn.Linear):
+    def __init__(self, a: Component, b: int, c: torch.nn.Module):
         super().__init__()
         self.child = a
         self.other_data = b
@@ -157,6 +172,15 @@ class ComposableTorchStatefulPrime(Component, torch.nn.Module):
     def _load_state(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
         assert prefix + 'other_data' in state_dict
         self.other_data = state_dict[prefix + 'other_data']
+
+
+class ComposableTorchStatefulTorchOnlyChild(Component, torch.nn.Module):
+    def __init__(self, a: Component, b: int, c: Component):
+        super().__init__()
+        self.child = a
+        self.other_data = b
+        self.torch_only = IntermediateTorchOnly(c)
+        self.register_attrs('other_data')
 
 
 class ComposableContainer(Component):
@@ -283,6 +307,15 @@ item:
         return obj
 
 
+def builder_noncomponent_bridge():
+    a = BasicStateful.compile()
+    b = random.randint(0, 100000)
+    c = BasicStatefulTwo.compile()
+    item = ComposableTorchStatefulTorchOnlyChild.compile(a=a, b=b, c=c)
+    obj = ComposableContainer.compile(item=item)
+    return obj
+
+
 @pytest.fixture
 def complex_multi_layered():
     return complex_builder
@@ -291,6 +324,10 @@ def complex_multi_layered():
 @pytest.fixture
 def complex_multi_layered_nontorch_root():
     return complex_builder_nontorch_root
+
+@pytest.fixture
+def noncomponent_bridge():
+    return builder_noncomponent_bridge
 
 @pytest.fixture
 def schema():
@@ -601,6 +638,34 @@ class TestSerializationIntegration:
         check_mapping_equivalence(new_state, old_state)
         check_mapping_equivalence(old_state._metadata, new_state._metadata, exclude_config=False)
 
+
+    def test_module_save_and_load_roundtrip_pytorch_only_bridge(self, noncomponent_bridge):
+        old_obj = noncomponent_bridge()
+        with tempfile.TemporaryDirectory() as root_path:
+            path = os.path.join(root_path, 'savefile.flambe')
+            old_state = old_obj.get_state()
+            save_state_to_file(old_state, path)
+            new_state = load_state_from_file(path)
+            new_obj = noncomponent_bridge()
+            new_obj.load_state(new_state)
+            # save(old_obj, path)
+            # new_obj = load(path)
+        old_state_get = old_obj.get_state()
+        new_state_get = new_obj.get_state()
+        check_mapping_equivalence(new_state, old_state)
+        print("old state metadata:")
+        print(old_state._metadata)
+        print("new state metadata:")
+        print(new_state._metadata)
+        print("old state metadata for item.torch_only")
+        print(old_state._metadata['item.torch_only'])
+        print("new state metadata for item.torch_only")
+        print(new_state._metadata['item.torch_only'])
+        check_mapping_equivalence(old_state._metadata, new_state._metadata, exclude_config=False)
+
+        check_mapping_equivalence(new_state_get, old_state_get)
+        # check_mapping_equivalence(old_state_get._metadata, new_state_get._metadata, exclude_config=False)
+
     # def test_module_save_and_load_example_encoder(self):
     #     TORCH_TAG_PREFIX = "torch"
     #     make_component(torch.nn.Module, TORCH_TAG_PREFIX, only_module='torch.nn')
@@ -705,7 +770,7 @@ class TestSerializationExtensions:
         In this case we will use a config containing torch, but we will make_component
         on torch so that it can be compiled. After that, we add_extensions_metadata with
         torch, which is a valid extensions for the config (redundant, but valid).
-        
+
         """
         TORCH_TAG_PREFIX = "torch"
         make_component(torch.nn.Module, TORCH_TAG_PREFIX, only_module='torch.nn')
@@ -732,7 +797,7 @@ class TestSerializationExtensions:
         In this case we will use a config containing torch, but we will make_component
         on torch so that it can be compiled. After that, we add_extensions_metadata with
         torch, which is a valid extensions for the config (redundant, but valid).
-        
+
         """
         TORCH_TAG_PREFIX = "torch"
         make_component(torch.nn.Module, TORCH_TAG_PREFIX, only_module='torch.nn')

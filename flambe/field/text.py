@@ -243,7 +243,7 @@ class TextField(Field):
             numericals.append(numerical)
 
         ret = torch.tensor(numericals).long()
-        
+
         if self.max_seq_len is not None:
             if self.truncate_end:
                 ret = ret[-self.max_seq_len:]
