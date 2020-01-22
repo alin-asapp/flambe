@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, Dict
 
 import torch
 import torch.nn.functional as F
@@ -9,7 +9,7 @@ from flambe.dataset import Dataset
 from flambe.metric import Metric
 from flambe.sampler import Sampler
 from flambe.learn import Trainer
-from flambe.nn import Module
+from flambe.nn import Module  # type: ignore[attr-defined]
 
 
 class DistillationTrainer(Trainer):
@@ -41,7 +41,7 @@ class DistillationTrainer(Trainer):
                  lower_is_better: bool = False,
                  max_grad_norm: Optional[float] = None,
                  max_grad_abs_val: Optional[float] = None,
-                 extra_validation_metrics: Optional[List[Metric]] = None,
+                 extra_validation_metrics: Optional[Dict[str, Metric]] = None,
                  teacher_columns: Optional[Tuple[int, ...]] = None,
                  student_columns: Optional[Tuple[int, ...]] = None,
                  alpha_kl: float = 0.5,
@@ -213,7 +213,7 @@ class DistillationTrainer(Trainer):
             student_columns = self.student_columns or range(len(batch))
             student_batch = [batch[i] for i in student_columns]
 
-            pred, target = self.model(**[t.to(self.device) for t in student_batch])
+            pred, target = self.model(*[t.to(self.device) for t in student_batch])
             pred = F.log_softmax(pred, dim=-1)
 
             preds.append(pred.cpu())
