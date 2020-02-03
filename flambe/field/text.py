@@ -44,7 +44,8 @@ class TextField(Field):
                  unk_init_all: bool = False,
                  drop_unknown: bool = False,
                  max_seq_len: Optional[int] = None,
-                 truncate_end: bool = False) -> None:
+                 truncate_start: bool = False,
+                 max_vocab_size: Optional[int] = None) -> None:
         """Initialize the TextField.
 
         Parameters
@@ -85,6 +86,20 @@ class TextField(Field):
             Whether to drop tokens that don't have embeddings
             associated. Defaults to True.
             Important: this flag will only work when using embeddings.
+        max_seq_len: int, optional
+            The maximum number of tokens per example.  If the length of
+            the tokenized example is greater than max_seq_len, then the
+            example is truncated.  Defaults to None (i.e. no max len).
+        truncate_start: bool
+            Whether to truncate the first few tokens of the example in
+            the event that example length exceeds max_seq_len. Only
+            relevant if max_seq_len is not None.  Defaults to False,
+            which means that tokens are removed from the end.
+        max_vocab_size: int, optional
+            The maximum size of the vocabulary.  If max_vocab_size is
+            supplied, the vocabulary will only consist of this many
+            tokens with the most frequency in the dataset.  Defaults
+            to None (i.e. no max size).  
 
         """
         self.tokenizer = tokenizer or WordTokenizer()
@@ -102,7 +117,8 @@ class TextField(Field):
         self.unk_init_all = unk_init_all
         self.drop_unknown = drop_unknown
         self.max_seq_len = max_seq_len
-        self.truncate_end = truncate_end
+        self.truncate_start = truncate_start
+        self.max_vocab_size = max_vocab_size
 
         self.unk_numericals: Set[int] = set()
 
@@ -166,33 +182,48 @@ class TextField(Field):
                     embeddings_matrix.append(torch.randn(model.vector_size))
 
         # Iterate over all examples
-        examples = (e for dataset in data for e in dataset if dataset is not None)
+        token_freq = {}
+        for dataset in data:
+            if dataset is not None:
+                for example in dataset:
+                    # Lowercase if requested
+                    if self.lower:
+                        example = example.lower()
+                    # Tokenize and add to vocabulary
+                    for token in self.tokenizer(example):
+                        if token in token_freq:
+                            token_freq[token] += 1
+                        else:
+                            token_freq[token] = 1
+
+        if self.max_vocab_size is not None:
+            tokens = sorted(token_freq.keys(),
+                            key=lambda t: token_freq[t],
+                            reverse=True)
+            tokens = tokens[:self.max_vocab_size]
+        else:
+            tokens = token_freq.keys()
 
         # Get current last id
         index = len(self.vocab) - 1
-
-        for example in examples:
-            # Lowercase if requested
-            example = example.lower() if self.lower else example
-            # Tokenize and add to vocabulary
-            for token in self.tokenizer(example):
-                if token not in self.vocab:
-                    if self.embeddings is not None:
-                        if token in model:
-                            self.vocab[token] = index = index + 1
-                            embeddings_matrix.append(torch.tensor(model[token]))
-                        else:
-                            if self.unk_init_all:
-                                # Give every OOV it's own embedding
-                                self.vocab[token] = index = index + 1
-                                embeddings_matrix.append(torch.randn(model.vector_size))
-                            else:
-                                # Collapse all OOV's to the same token
-                                # id
-                                self.vocab[token] = self.vocab[self.unk]
-                            self.unk_numericals.add(self.vocab[token])
-                    else:
+        for token in tokens:
+            if token not in self.vocab:
+                if self.embeddings is not None:
+                    if token in model:
                         self.vocab[token] = index = index + 1
+                        embeddings_matrix.append(torch.tensor(model[token]))
+                    else:
+                        if self.unk_init_all:
+                            # Give every OOV it's own embedding
+                            self.vocab[token] = index = index + 1
+                            embeddings_matrix.append(torch.randn(model.vector_size))
+                        else:
+                            # Collapse all OOV's to the same token
+                            # id
+                            self.vocab[token] = self.vocab[self.unk]
+                        self.unk_numericals.add(self.vocab[token])
+                else:
+                    self.vocab[token] = index = index + 1
 
         if self.embeddings is not None:
             self.embedding_matrix = torch.stack(embeddings_matrix)
@@ -245,7 +276,7 @@ class TextField(Field):
         ret = torch.tensor(numericals).long()
 
         if self.max_seq_len is not None:
-            if self.truncate_end:
+            if self.truncate_start:
                 ret = ret[-self.max_seq_len:]
             else:
                 ret = ret[:self.max_seq_len]
