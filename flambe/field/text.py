@@ -99,7 +99,7 @@ class TextField(Field):
             The maximum size of the vocabulary.  If max_vocab_size is
             supplied, the vocabulary will only consist of this many
             tokens with the most frequency in the dataset.  Defaults
-            to None (i.e. no max size).  
+            to None (i.e. no max size).
 
         """
         self.tokenizer = tokenizer or WordTokenizer()
