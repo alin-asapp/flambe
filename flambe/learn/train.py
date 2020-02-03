@@ -228,8 +228,8 @@ class Trainer(Component):
 
                 # Update iter scheduler
                 if self.iter_scheduler is not None:
-                    learning_rate = self.iter_scheduler.get_lr()[0]  # type: ignore
-                    log(f'{tb_prefix}Training/LR', learning_rate, global_step)
+                    lr = self.optimizer.param_groups[0]['lr']  # type: ignore
+                    log(f'{tb_prefix}Training/LR', lr, global_step)
                     self.iter_scheduler.step()  # type: ignore
 
             # Zero the gradients when exiting a train step
@@ -282,17 +282,19 @@ class Trainer(Component):
                 best_model_state[k] = t.cpu().detach()
             self._best_model = best_model_state
 
+        tb_prefix = f"{self.tb_log_prefix} " if self.tb_log_prefix else ""
+
         # Update scheduler
         if self.scheduler is not None:
+            learning_rate = self.optimizer.param_groups[0]['lr']  # type: ignore
+            log(f'{tb_prefix}Training/LR', learning_rate, self._step)
             if isinstance(self.scheduler, ReduceLROnPlateau):
                 self.scheduler.step(val_loss)
             else:
                 # torch's _LRScheduler.step DOES have a default value
                 # so passing in no args is fine; it will automatically
                 # compute the current epoch
-                self.scheduler.step()  # type: ignore
-
-        tb_prefix = f"{self.tb_log_prefix} " if self.tb_log_prefix else ""
+                self.scheduler.step()
 
         # Log metrics
         log(f'{tb_prefix}Validation/Loss', val_loss, self._step)
